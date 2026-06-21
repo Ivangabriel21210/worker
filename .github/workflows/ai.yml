@@ -1,0 +1,51 @@
+name: Ollama Node en GitHub Actions
+
+on:
+  workflow_dispatch: # Para activarlo manualmente desde la web
+
+jobs:
+  run-ollama:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Instalar WireGuard y Ollama
+      run: |
+        # 1. Actualizar sistema e instalar WireGuard
+        sudo apt-get update && sudo apt-get install -y wireguard
+
+        # 2. Instalar Ollama de forma oficial
+        curl -fsSL https://ollama.com/install.sh | sh
+
+    - name: Configurar e iniciar Túnel IPv6 (WireGuard)
+      run: |
+        # Creamos el archivo de configuración de WireGuard con tus datos de red
+        # Usamos la sintaxis de secrets para proteger tus llaves
+        sudo mkdir -p /etc/wireguard
+        cat <<EOF | sudo tee /etc/wireguard/wg0.conf
+        [Interface]
+        PrivateKey = ${{ secrets.WG_GITHUB_PRIVATE_KEY }}
+        Address = [2600:1f18:5c47:df8::200]/64 # Le asignamos una IP fija en tu rango
+
+        [Peer]
+        PublicKey = ${{ secrets.WG_VPS_PUBLIC_KEY }}
+        Endpoint = [2600:1f18:5c47:df8:2445:7b1b:f640:dfd1]:51820 # La IP de tu AWS y puerto WG
+        AllowedIPs = ::/0
+        PersistentKeepalive = 25
+        EOF
+
+        # Levantar la interfaz de red
+        sudo wg-quick up wg0
+
+    - name: Levantar Ollama con CORS Libre
+      run: |
+        # Detener el servicio por defecto para levantarlo con nuestras variables
+        sudo systemctl stop ollama || true
+        
+        # Forzar a Ollama a escuchar en todas las interfaces y permitir CORS para Page Assist
+        export OLLAMA_HOST=0.0.0.0
+        export OLLAMA_ORIGINS="*"
+        
+        # Descargar el modelo preferido (Qwen 7B va excelente en las CPUs de GitHub)
+        ollama pull qwen2.5:7b
+        
+        # Mantener Ollama corriendo en primer plano para que el Action no se cierre
+        ollama serve
