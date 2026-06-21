@@ -35,15 +35,24 @@ jobs:
 
     - name: Levantar Ollama con CORS Libre
       run: |
-        # Detener el servicio por defecto para levantarlo con nuestras variables
+        # 1. Detener el servicio automático del sistema
+        lscpu
+        free -h
+        df -h
         sudo systemctl stop ollama || true
         
-        # Forzar a Ollama a escuchar en todas las interfaces y permitir CORS para Page Assist
+        # 2. Configurar las variables globales para esta sesión
         export OLLAMA_HOST=0.0.0.0
         export OLLAMA_ORIGINS="*"
         
-        # Descargar el modelo preferido (Qwen 7B va excelente en las CPUs de GitHub)
+        # 3. Iniciar el servidor de Ollama en SEGUNDO PLANO (&) enviando los logs a un archivo
+        ollama serve > /tmp/ollama_exec.log 2>&1 &
+        
+        # 4. Esperar 5 segundos a que el servidor inicialice por completo en la CPU
+        sleep 5
+        
+        # 5. Descargar el modelo (Ahora sí conectará sin problemas)
         ollama pull qwen2.5:7b
         
-        # Mantener Ollama corriendo en primer plano para que el Action no se cierre
-        ollama serve
+        # 6. Mantener el contenedor vivo leyendo los logs en tiempo real para que el Action no se cierre
+        tail -f /tmp/ollama_exec.log
